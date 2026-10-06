@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">جهّز</string>
+    <string name="nav_home">الرئيسية</string>
+    <string name="nav_products">المنتجات</string>
+    <string name="nav_orders">سجل الطلبيات</string>
+    <string name="nav_suppliers">الموردين</string>
+    <string name="nav_settings">الإعدادات</string>
+    <string name="feature_coming_soon">هذه الميزة ستتوفر في تحديث قادم.</string>
+    <string name="empty_products">ما عندك منتجات بعد</string>
+    <string name="add_product_btn">+ إضافة منتج</string>
+    <string name="search_hint">ابحث عن منتج...</string>
+    <string name="no_search_results">ما لقينا منتج بهذا الاسم.</string>
+    <string name="delete_dialog_title">هل تريد حذف هذا المنتج؟</string>
+    <string name="delete_btn">حذف</string>
+    <string name="cancel_btn">إلغاء</string>
+    <string name="edit_product">تعديل المنتج</string>
+    <string name="add_product">إضافة منتج جديد</string>
+    <string name="product_name_hint">اسم المنتج (مثال: بيبسي 250)</string>
+    <string name="product_price_hint">السعر بالدينار (مثال: 18500)</string>
+    <string name="select_unit">اختر الوحدة</string>
+    <string name="select_image">اختر صورة</string>
+    <string name="save_btn">حفظ</string>
+    <string name="error_name_required">الرجاء إدخال اسم المنتج</string>
+    <string name="error_price_invalid">الرجاء إدخال سعر صالح</string>
+    <string name="error_unit_required">الرجاء اختيار الوحدة</string>
+    <string name="currency_suffix">د.ع</string>
+</resources>
