@@ -9,8 +9,8 @@ data class ProductEntity(
     val id: Long = 0L,
     val name: String,
     val imageUri: String? = null,
-    val price: Long,
-    val unit: String,
+    val categoryId: Long? = null,
+    val isActive: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

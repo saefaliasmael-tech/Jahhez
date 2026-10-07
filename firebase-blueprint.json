@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Jahhez Firestore Schema (Model B)",
+  "description": "Multi-tenant logical isolation schema for wholesale merchants and their store customers",
+  "entities": {
+    "users": {
+      "path": "users/{uid}",
+      "description": "User profile mapping Firebase UID to assigned Store ID and UserRole",
+      "properties": {
+        "uid": { "type": "string" },
+        "storeId": { "type": "string" },
+        "role": { "type": "string", "enum": ["MERCHANT", "CUSTOMER"] },
+        "displayName": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["uid", "storeId", "role"]
+    },
+    "merchants": {
+      "path": "merchants/{storeId}",
+      "description": "Wholesaler store profile and configuration",
+      "properties": {
+        "storeId": { "type": "string" },
+        "storeName": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "ownerPhone": { "type": "string" },
+        "whatsappNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "SUSPENDED"] },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["storeId", "storeName", "ownerUid"]
+    },
+    "products": {
+      "path": "merchants/{storeId}/products/{productId}",
+      "description": "Product document with embedded selling units, pricing, and metadata",
+      "properties": {
+        "id": { "type": "integer" },
+        "storeId": { "type": "string" },
+        "name": { "type": "string" },
+        "categoryId": { "type": ["integer", "null"] },
+        "isActive": { "type": "boolean" },
+        "units": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" },
+              "productId": { "type": "integer" },
+              "unitName": { "type": "string" },
+              "price": { "type": "integer" },
+              "isDefault": { "type": "boolean" },
+              "minQuantity": { "type": "integer" }
+            },
+            "required": ["unitName", "price"]
+          }
+        },
+        "createdAt": { "type": "integer" },
+        "updatedAt": { "type": "integer" }
+      },
+      "required": ["id", "storeId", "name", "isActive"]
+    }
+  }
+}

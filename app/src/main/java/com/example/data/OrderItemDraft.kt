@@ -2,6 +2,7 @@ package com.example.data
 
 data class OrderItemDraft(
     val productId: Long,
+    val productUnitId: Long? = null,
     val productNameSnapshot: String,
     val productImageUriSnapshot: String? = null,
     val unitSnapshot: String,
@@ -15,6 +16,7 @@ data class OrderItemDraft(
         return OrderItemEntity(
             orderId = orderId,
             productId = productId,
+            productUnitId = productUnitId,
             productNameSnapshot = productNameSnapshot,
             productImageUriSnapshot = productImageUriSnapshot,
             unitSnapshot = unitSnapshot,
@@ -25,13 +27,19 @@ data class OrderItemDraft(
     }
 
     companion object {
-        fun fromProduct(product: ProductEntity, quantity: Int = 1): OrderItemDraft {
+        fun fromProductWithUnits(
+            productWithUnits: ProductWithUnits,
+            selectedUnit: ProductUnitEntity? = null,
+            quantity: Int = 1
+        ): OrderItemDraft {
+            val unit = selectedUnit ?: productWithUnits.defaultUnit
             return OrderItemDraft(
-                productId = product.id,
-                productNameSnapshot = product.name,
-                productImageUriSnapshot = product.imageUri,
-                unitSnapshot = product.unit,
-                unitPriceSnapshot = product.price,
+                productId = productWithUnits.product.id,
+                productUnitId = unit?.id,
+                productNameSnapshot = productWithUnits.product.name,
+                productImageUriSnapshot = productWithUnits.product.imageUri,
+                unitSnapshot = unit?.unitName ?: "",
+                unitPriceSnapshot = unit?.price ?: 0L,
                 quantity = quantity
             )
         }
@@ -39,6 +47,7 @@ data class OrderItemDraft(
         fun fromEntity(entity: OrderItemEntity): OrderItemDraft {
             return OrderItemDraft(
                 productId = entity.productId,
+                productUnitId = entity.productUnitId,
                 productNameSnapshot = entity.productNameSnapshot,
                 productImageUriSnapshot = entity.productImageUriSnapshot,
                 unitSnapshot = entity.unitSnapshot,

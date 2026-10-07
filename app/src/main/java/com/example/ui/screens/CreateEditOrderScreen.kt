@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.OrderEntity
 import com.example.data.OrderItemDraft
-import com.example.data.ProductEntity
+import com.example.data.ProductWithUnits
 import com.example.ui.viewmodel.OrderViewModel
 import java.text.NumberFormat
 import java.util.Locale
@@ -224,12 +224,12 @@ fun CreateEditOrderScreen(
                     }
                 }
             } else {
-                items(draftItems, key = { "draft_${it.productId}" }) { draftItem ->
+                items(draftItems, key = { "draft_${it.productId}_${it.productUnitId ?: 0}" }) { draftItem ->
                     DraftItemCard(
                         item = draftItem,
-                        onIncrement = { orderViewModel.incrementQuantity(draftItem.productId) },
-                        onDecrement = { orderViewModel.decrementQuantity(draftItem.productId) },
-                        onRemove = { orderViewModel.removeItemFromDraft(draftItem.productId) }
+                        onIncrement = { orderViewModel.incrementQuantity(draftItem.productId, draftItem.productUnitId) },
+                        onDecrement = { orderViewModel.decrementQuantity(draftItem.productId, draftItem.productUnitId) },
+                        onRemove = { orderViewModel.removeItemFromDraft(draftItem.productId, draftItem.productUnitId) }
                     )
                 }
             }
@@ -311,13 +311,13 @@ fun CreateEditOrderScreen(
                     }
                 }
             } else {
-                items(availableProducts, key = { "product_${it.id}" }) { product ->
-                    val addedQuantity = draftItems.find { it.productId == product.id }?.quantity ?: 0
+                items(availableProducts, key = { "product_${it.product.id}" }) { productWithUnits ->
+                    val addedQuantity = draftItems.filter { it.productId == productWithUnits.product.id }.sumOf { it.quantity }
                     ProductSelectableCard(
-                        product = product,
+                        productWithUnits = productWithUnits,
                         selectedQuantity = addedQuantity,
                         onSelect = {
-                            orderViewModel.addProductToDraft(product)
+                            orderViewModel.addProductToDraft(productWithUnits)
                         }
                     )
                 }
@@ -519,13 +519,16 @@ fun DraftItemCard(
 
 @Composable
 fun ProductSelectableCard(
-    product: ProductEntity,
+    productWithUnits: ProductWithUnits,
     selectedQuantity: Int,
     onSelect: () -> Unit
 ) {
-    val formattedPrice = remember(product.price) {
+    val product = productWithUnits.product
+    val defaultUnit = productWithUnits.defaultUnit
+    val formattedPrice = remember(defaultUnit?.price) {
+        val price = defaultUnit?.price ?: 0L
         val formatter = NumberFormat.getNumberInstance(Locale.US)
-        "${formatter.format(product.price)} د.ع"
+        "${formatter.format(price)} د.ع"
     }
 
     Card(
@@ -586,7 +589,7 @@ fun ProductSelectableCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "$formattedPrice / ${product.unit}",
+                    text = "$formattedPrice / ${defaultUnit?.unitName ?: ""}",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary
@@ -623,4 +626,3 @@ fun ProductSelectableCard(
         }
     }
 }
-

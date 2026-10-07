@@ -24,6 +24,7 @@ data class OrderItemEntity(
     val id: Long = 0L,
     val orderId: Long,
     val productId: Long,
+    val productUnitId: Long? = null,
     val productNameSnapshot: String,
     val productImageUriSnapshot: String? = null,
     val unitSnapshot: String,

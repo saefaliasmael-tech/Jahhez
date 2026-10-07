@@ -14,11 +14,6 @@ fun SuppliersScreen() {
 }
 
 @Composable
-fun SettingsScreen() {
-    PlaceholderScreen(text = "الإعدادات\nهذه الميزة ستتوفر في تحديث قادم.")
-}
-
-@Composable
 fun PlaceholderScreen(text: String) {
     Box(
         modifier = Modifier

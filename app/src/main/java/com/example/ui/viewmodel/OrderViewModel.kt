@@ -10,6 +10,8 @@ import com.example.data.OrderRepository
 import com.example.data.OrderWithItems
 import com.example.data.ProductEntity
 import com.example.data.ProductRepository
+import com.example.data.ProductUnitEntity
+import com.example.data.ProductWithUnits
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,7 +29,7 @@ class OrderViewModel(application: Application) : AndroidViewModel(application) {
     init {
         val db = AppDatabase.getDatabase(application)
         orderRepository = OrderRepository(db.orderDao())
-        productRepository = ProductRepository(db.productDao())
+        productRepository = ProductRepository(db.productDao(), application)
     }
 
     val ordersWithItems: StateFlow<List<OrderWithItems>> = orderRepository.ordersWithItems
@@ -41,7 +43,7 @@ class OrderViewModel(application: Application) : AndroidViewModel(application) {
     val productSearchQuery: StateFlow<String> = _productSearchQuery.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val availableProducts: StateFlow<List<ProductEntity>> = _productSearchQuery
+    val availableProducts: StateFlow<List<ProductWithUnits>> = _productSearchQuery
         .flatMapLatest { query ->
             productRepository.searchProducts(query)
         }
@@ -100,22 +102,55 @@ class OrderViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addProductToDraft(product: ProductEntity) {
+    fun addProductToDraft(productWithUnits: ProductWithUnits, unit: ProductUnitEntity? = null) {
+        val selectedUnit = unit ?: productWithUnits.defaultUnit ?: return
+        val currentItems = _draftItems.value.toMutableList()
+        val index = currentItems.indexOfFirst {
+            it.productId == productWithUnits.product.id && it.productUnitId == selectedUnit.id
+        }
+        if (index != -1) {
+            val existing = currentItems[index]
+            currentItems[index] = existing.copy(quantity = existing.quantity + 1)
+        } else {
+            currentItems.add(OrderItemDraft.fromProductWithUnits(productWithUnits, selectedUnit, quantity = 1))
+        }
+        _draftItems.value = currentItems
+        _hasUnsavedChanges.value = true
+    }
+
+    fun addProductToDraft(
+        product: ProductEntity,
+        unitName: String = "كارتون",
+        price: Long = 0L,
+        unitId: Long? = null
+    ) {
         val currentItems = _draftItems.value.toMutableList()
         val index = currentItems.indexOfFirst { it.productId == product.id }
         if (index != -1) {
             val existing = currentItems[index]
             currentItems[index] = existing.copy(quantity = existing.quantity + 1)
         } else {
-            currentItems.add(OrderItemDraft.fromProduct(product, quantity = 1))
+            currentItems.add(
+                OrderItemDraft(
+                    productId = product.id,
+                    productUnitId = unitId,
+                    productNameSnapshot = product.name,
+                    productImageUriSnapshot = product.imageUri,
+                    unitSnapshot = unitName,
+                    unitPriceSnapshot = price,
+                    quantity = 1
+                )
+            )
         }
         _draftItems.value = currentItems
         _hasUnsavedChanges.value = true
     }
 
-    fun incrementQuantity(productId: Long) {
+    fun incrementQuantity(productId: Long, productUnitId: Long? = null) {
         val currentItems = _draftItems.value.toMutableList()
-        val index = currentItems.indexOfFirst { it.productId == productId }
+        val index = currentItems.indexOfFirst {
+            it.productId == productId && (productUnitId == null || it.productUnitId == productUnitId)
+        }
         if (index != -1) {
             val existing = currentItems[index]
             currentItems[index] = existing.copy(quantity = existing.quantity + 1)
@@ -124,9 +159,11 @@ class OrderViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun decrementQuantity(productId: Long) {
+    fun decrementQuantity(productId: Long, productUnitId: Long? = null) {
         val currentItems = _draftItems.value.toMutableList()
-        val index = currentItems.indexOfFirst { it.productId == productId }
+        val index = currentItems.indexOfFirst {
+            it.productId == productId && (productUnitId == null || it.productUnitId == productUnitId)
+        }
         if (index != -1) {
             val existing = currentItems[index]
             if (existing.quantity > 1) {
@@ -137,9 +174,11 @@ class OrderViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun removeItemFromDraft(productId: Long) {
+    fun removeItemFromDraft(productId: Long, productUnitId: Long? = null) {
         val currentItems = _draftItems.value.toMutableList()
-        val index = currentItems.indexOfFirst { it.productId == productId }
+        val index = currentItems.indexOfFirst {
+            it.productId == productId && (productUnitId == null || it.productUnitId == productUnitId)
+        }
         if (index != -1) {
             currentItems.removeAt(index)
             _draftItems.value = currentItems

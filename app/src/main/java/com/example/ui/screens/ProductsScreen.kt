@@ -24,8 +24,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.ProductEntity
+import com.example.data.ProductUnitEntity
+import com.example.data.ProductWithUnits
+import com.example.data.store.UserRole
+import com.example.data.sync.SyncStatus
 import com.example.ui.viewmodel.ProductViewModel
 import java.text.NumberFormat
 import java.util.Locale
@@ -35,14 +40,21 @@ import java.util.Locale
 fun ProductsScreen(viewModel: ProductViewModel) {
     val products by viewModel.products.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val userRole by viewModel.userRole.collectAsState()
+    val syncStatus by viewModel.syncStatus.collectAsState()
+    val pendingCount by viewModel.pendingSyncCount.collectAsState()
+
+    val displayProducts = remember(products) {
+        products.filter { it.product.isActive }
+    }
 
     var showAddEditDialog by remember { mutableStateOf(false) }
-    var editingProduct by remember { mutableStateOf<ProductEntity?>(null) }
+    var editingProductWithUnits by remember { mutableStateOf<ProductWithUnits?>(null) }
     var productToDelete by remember { mutableStateOf<ProductEntity?>(null) }
 
     Scaffold(
         topBar = {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { viewModel.setSearchQuery(it) },
@@ -61,18 +73,109 @@ fun ProductsScreen(viewModel: ProductViewModel) {
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        when {
+                            syncStatus == SyncStatus.SYNCING -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "جاري المزامنة...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            pendingCount > 0 || syncStatus == SyncStatus.PENDING -> {
+                                Icon(
+                                    imageVector = Icons.Default.CloudQueue,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.tertiary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "بانتظار المزامنة ($pendingCount)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
+                            }
+                            syncStatus == SyncStatus.SYNCED -> {
+                                Icon(
+                                    imageVector = Icons.Default.CloudDone,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "تمت المزامنة",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            syncStatus == SyncStatus.FAILED -> {
+                                Icon(
+                                    imageVector = Icons.Default.CloudOff,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "تعذر المزامنة (سيتم المحاولة لاحقاً)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            else -> {
+                                Text(
+                                    text = if (userRole == UserRole.MERCHANT) "وضع التاجر" else "وضع العميل",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    IconButton(
+                        onClick = { viewModel.triggerSync() },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = "مزامنة الآن",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    editingProduct = null
-                    showAddEditDialog = true
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "إضافة منتج")
+            if (userRole == UserRole.MERCHANT) {
+                FloatingActionButton(
+                    onClick = {
+                        editingProductWithUnits = null
+                        showAddEditDialog = true
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "إضافة منتج")
+                }
             }
         }
     ) { innerPadding ->
@@ -81,7 +184,7 @@ fun ProductsScreen(viewModel: ProductViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (products.isEmpty()) {
+            if (displayProducts.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -97,16 +200,18 @@ fun ProductsScreen(viewModel: ProductViewModel) {
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = {
-                                    editingProduct = null
-                                    showAddEditDialog = true
+                            if (userRole == UserRole.MERCHANT) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = {
+                                        editingProductWithUnits = null
+                                        showAddEditDialog = true
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = "+ إضافة منتج")
                                 }
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = "+ إضافة منتج")
                             }
                         } else {
                             Text(
@@ -125,15 +230,16 @@ fun ProductsScreen(viewModel: ProductViewModel) {
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(products, key = { it.id }) { product ->
+                    items(displayProducts, key = { it.product.id }) { productWithUnits ->
                         ProductItemCard(
-                            product = product,
+                            productWithUnits = productWithUnits,
+                            canEdit = userRole == UserRole.MERCHANT,
                             onEdit = {
-                                editingProduct = product
+                                editingProductWithUnits = productWithUnits
                                 showAddEditDialog = true
                             },
                             onDelete = {
-                                productToDelete = product
+                                productToDelete = productWithUnits.product
                             }
                         )
                     }
@@ -147,26 +253,26 @@ fun ProductsScreen(viewModel: ProductViewModel) {
 
     if (showAddEditDialog) {
         AddEditProductDialog(
-            product = editingProduct,
+            productWithUnits = editingProductWithUnits,
+            viewModel = viewModel,
             onDismiss = { showAddEditDialog = false },
-            onSave = { name, imageUri, priceStr, unit ->
-                if (editingProduct == null) {
+            onSave = { name, imageUri, units ->
+                if (editingProductWithUnits == null) {
                     viewModel.addProduct(
                         name = name,
                         imageUri = imageUri,
-                        priceStr = priceStr,
-                        unit = unit,
+                        units = units,
                         onSuccess = { showAddEditDialog = false },
                         onError = {}
                     )
                 } else {
                     viewModel.updateProduct(
-                        id = editingProduct!!.id,
+                        id = editingProductWithUnits!!.product.id,
                         name = name,
                         imageUri = imageUri,
-                        priceStr = priceStr,
-                        unit = unit,
-                        createdAt = editingProduct!!.createdAt,
+                        units = units,
+                        createdAt = editingProductWithUnits!!.product.createdAt,
+                        oldImageUri = editingProductWithUnits!!.product.imageUri,
                         onSuccess = { showAddEditDialog = false },
                         onError = {}
                     )
@@ -179,7 +285,7 @@ fun ProductsScreen(viewModel: ProductViewModel) {
         AlertDialog(
             onDismissRequest = { productToDelete = null },
             title = { Text("حذف المنتج") },
-            text = { Text("هل تريد حذف هذا المنتج؟") },
+            text = { Text("هل تريد حذف هذا المنتج مع جميع وحدات البيع المرتبطة به؟") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -202,13 +308,19 @@ fun ProductsScreen(viewModel: ProductViewModel) {
 
 @Composable
 fun ProductItemCard(
-    product: ProductEntity,
+    productWithUnits: ProductWithUnits,
+    canEdit: Boolean = true,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val formattedPrice = remember(product.price) {
+    val product = productWithUnits.product
+    val defaultUnit = productWithUnits.defaultUnit
+    val units = productWithUnits.units
+
+    val formattedPrice = remember(defaultUnit?.price) {
+        val price = defaultUnit?.price ?: 0L
         val formatter = NumberFormat.getNumberInstance(Locale.US)
-        "${formatter.format(product.price)} د.ع"
+        "${formatter.format(price)} د.ع"
     }
 
     Card(
@@ -216,127 +328,192 @@ fun ProductItemCard(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(12.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surface)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (!product.imageUri.isNullOrBlank()) {
-                    AsyncImage(
-                        model = Uri.parse(product.imageUri),
-                        contentDescription = product.name,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Inventory2,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                            modifier = Modifier.size(28.dp)
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                ) {
+                    if (!product.imageUri.isNullOrBlank()) {
+                        AsyncImage(
+                            model = Uri.parse(product.imageUri),
+                            contentDescription = product.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
                         )
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Inventory2,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(
+                    modifier = Modifier.weight(1.2f)
+                ) {
+                    Text(
+                        text = product.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "$formattedPrice / ${defaultUnit?.unitName ?: "بدون وحدة"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (units.size > 1) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "${units.size} وحدات بيع متاحة",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                }
+
+                if (canEdit) {
+                    Row(
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onEdit) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "تعديل",
+                                tint = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                        IconButton(onClick = onDelete) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "حذف",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(
-                modifier = Modifier.weight(1.2f)
-            ) {
-                Text(
-                    text = product.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = formattedPrice,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = product.unit,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onEdit) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "تعديل",
-                        tint = MaterialTheme.colorScheme.secondary
-                    )
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "حذف",
-                        tint = MaterialTheme.colorScheme.error
-                    )
+            if (units.size > 1) {
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    units.forEach { unit ->
+                        val priceFormatter = NumberFormat.getNumberInstance(Locale.US)
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (unit.isDefault) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surface
+                            }
+                        ) {
+                            Text(
+                                text = "${unit.unitName}: ${priceFormatter.format(unit.price)} د.ع",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = if (unit.isDefault) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+data class UnitInputState(
+    val id: Long = 0L,
+    val unitName: String = "",
+    val priceStr: String = "",
+    val isDefault: Boolean = false
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditProductDialog(
-    product: ProductEntity?,
+    productWithUnits: ProductWithUnits?,
+    viewModel: ProductViewModel,
     onDismiss: () -> Unit,
-    onSave: (name: String, imageUri: String?, price: String, unit: String) -> Unit
+    onSave: (name: String, imageUri: String?, units: List<ProductUnitEntity>) -> Unit
 ) {
-    var name by remember { mutableStateOf(product?.name ?: "") }
-    var priceStr by remember { mutableStateOf(product?.price?.toString() ?: "") }
-    var selectedUnit by remember { mutableStateOf(product?.unit ?: "قطعة") }
-    var imageUri by remember { mutableStateOf(product?.imageUri) }
+    var name by remember { mutableStateOf(productWithUnits?.product?.name ?: "") }
+    var imageUri by remember { mutableStateOf(productWithUnits?.product?.imageUri) }
+
+    var unitStates by remember {
+        mutableStateOf(
+            if (productWithUnits != null && productWithUnits.units.isNotEmpty()) {
+                productWithUnits.units.map {
+                    UnitInputState(
+                        id = it.id,
+                        unitName = it.unitName,
+                        priceStr = it.price.toString(),
+                        isDefault = it.isDefault
+                    )
+                }
+            } else {
+                listOf(UnitInputState(unitName = "", priceStr = "", isDefault = true))
+            }
+        )
+    }
 
     var nameError by remember { mutableStateOf(false) }
-    var priceError by remember { mutableStateOf(false) }
-
-    val units = listOf("قطعة", "باكيت", "كارتون", "صندوق", "كيس", "عبوة")
-    var expandedUnitDropdown by remember { mutableStateOf(false) }
+    var unitsError by remember { mutableStateOf<String?>(null) }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            imageUri = uri.toString()
+            val permanentUri = viewModel.saveImagePermanently(uri)
+            if (permanentUri != null) {
+                imageUri = permanentUri
+            }
         }
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(if (product == null) "إضافة منتج جديد" else "تعديل المنتج")
+            Text(if (productWithUnits == null) "إضافة منتج جديد" else "تعديل المنتج")
         },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // Photo picker with internal persistence
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -377,7 +554,7 @@ fun AddEditProductDialog(
                         name = it
                         if (name.isNotBlank()) nameError = false
                     },
-                    label = { Text("اسم المنتج *") },
+                    label = { Text("اسم المنتج (مثال: بيبسي 250) *") },
                     isError = nameError,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -390,68 +567,158 @@ fun AddEditProductDialog(
                     )
                 }
 
-                OutlinedTextField(
-                    value = priceStr,
-                    onValueChange = {
-                        priceStr = it.filter { char -> char.isDigit() }
-                        if (priceStr.isNotBlank()) priceError = false
-                    },
-                    label = { Text("السعر (د.ع) *") },
-                    isError = priceError,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (priceError) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "الرجاء إدخال سعر صالح",
+                        text = "وحدات البيع والأسعار",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(
+                        onClick = {
+                            unitStates = unitStates + UnitInputState(
+                                unitName = "",
+                                priceStr = "",
+                                isDefault = unitStates.isEmpty()
+                            )
+                        }
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("إضافة وحدة")
+                    }
+                }
+
+                unitStates.forEachIndexed { index, unitState ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = unitState.unitName,
+                                    onValueChange = { newName ->
+                                        unitStates = unitStates.mapIndexed { i, item ->
+                                            if (i == index) item.copy(unitName = newName) else item
+                                        }
+                                        unitsError = null
+                                    },
+                                    label = { Text("الوحدة (مثال: كارتونة)") },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                OutlinedTextField(
+                                    value = unitState.priceStr,
+                                    onValueChange = { newPrice ->
+                                        val digitsOnly = newPrice.filter { it.isDigit() }
+                                        unitStates = unitStates.mapIndexed { i, item ->
+                                            if (i == index) item.copy(priceStr = digitsOnly) else item
+                                        }
+                                        unitsError = null
+                                    },
+                                    label = { Text("السعر د.ع") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                if (unitStates.size > 1) {
+                                    IconButton(
+                                        onClick = {
+                                            val remaining = unitStates.filterIndexed { i, _ -> i != index }
+                                            unitStates = if (unitState.isDefault && remaining.isNotEmpty()) {
+                                                remaining.mapIndexed { i, item ->
+                                                    if (i == 0) item.copy(isDefault = true) else item
+                                                }
+                                            } else {
+                                                remaining
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "حذف الوحدة",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = unitState.isDefault,
+                                    onClick = {
+                                        unitStates = unitStates.mapIndexed { i, item ->
+                                            item.copy(isDefault = (i == index))
+                                        }
+                                    }
+                                )
+                                Text(
+                                    text = if (unitState.isDefault) "الوحدة الافتراضية للبيع" else "تعيين كوحدة افتراضية",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (unitState.isDefault) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (unitsError != null) {
+                    Text(
+                        text = unitsError!!,
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall
                     )
-                }
-
-                ExposedDropdownMenuBox(
-                    expanded = expandedUnitDropdown,
-                    onExpandedChange = { expandedUnitDropdown = !expandedUnitDropdown },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = selectedUnit,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("الوحدة *") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedUnitDropdown) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = expandedUnitDropdown,
-                        onDismissRequest = { expandedUnitDropdown = false }
-                    ) {
-                        units.forEach { unitOption ->
-                            DropdownMenuItem(
-                                text = { Text(unitOption) },
-                                onClick = {
-                                    selectedUnit = unitOption
-                                    expandedUnitDropdown = false
-                                }
-                            )
-                        }
-                    }
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val hasError = name.isBlank() || priceStr.toLongOrNull() == null || selectedUnit.isBlank()
-                    if (name.isBlank()) nameError = true
-                    if (priceStr.toLongOrNull() == null) priceError = true
-
-                    if (!hasError) {
-                        onSave(name, imageUri, priceStr, selectedUnit)
+                    if (name.isBlank()) {
+                        nameError = true
+                        return@Button
                     }
+                    if (unitStates.isEmpty()) {
+                        unitsError = "الرجاء إضافة وحدة بيع واحدة على الأقل"
+                        return@Button
+                    }
+                    val invalidUnit = unitStates.find { it.unitName.isBlank() || it.priceStr.toLongOrNull() == null }
+                    if (invalidUnit != null) {
+                        unitsError = "الرجاء كتابة اسم الوحدة وسعر صحيح لكل الوحدات"
+                        return@Button
+                    }
+
+                    val finalUnits = unitStates.map { state ->
+                        ProductUnitEntity(
+                            id = state.id,
+                            productId = productWithUnits?.product?.id ?: 0L,
+                            unitName = state.unitName.trim(),
+                            price = state.priceStr.toLong(),
+                            isDefault = state.isDefault,
+                            minQuantity = 1
+                        )
+                    }
+                    onSave(name, imageUri, finalUnits)
                 }
             ) {
                 Text("حفظ")

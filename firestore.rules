@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function userStoreId() {
+      return getUserDoc().storeId;
+    }
+
+    function userRole() {
+      return getUserDoc().role;
+    }
+
+    function isMerchantOf(storeId) {
+      return isSignedIn() && userStoreId() == storeId && userRole() == 'MERCHANT';
+    }
+
+    function isCustomerOf(storeId) {
+      return isSignedIn() && userStoreId() == storeId && userRole() == 'CUSTOMER';
+    }
+
+    function isMemberOf(storeId) {
+      return isSignedIn() && userStoreId() == storeId;
+    }
+
+    // 1. Users collection: users/{uid}
+    match /users/{uid} {
+      // User can read their own profile, or merchant of the same store can view members
+      allow read: if isSignedIn() && (
+        request.auth.uid == uid ||
+        isMerchantOf(resource.data.storeId)
+      );
+
+      // User profile can be created initially by the authenticated user
+      allow create: if isOwner(uid) &&
+        request.resource.data.uid == uid &&
+        request.resource.data.storeId is string &&
+        request.resource.data.storeId.size() > 0 &&
+        (request.resource.data.role == 'MERCHANT' || request.resource.data.role == 'CUSTOMER');
+
+      // Crucial: Client cannot change their own storeId or role
+      allow update: if isOwner(uid) &&
+        request.resource.data.storeId == resource.data.storeId &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.uid == resource.data.uid;
+
+      allow delete: if false;
+    }
+
+    // 2. Merchants collection: merchants/{storeId}
+    match /merchants/{storeId} {
+      // Store profile can be read by members belonging to this store only
+      allow read: if isMemberOf(storeId);
+
+      // Store creation: user must be authenticated merchant and establish ownership
+      allow create: if isSignedIn() &&
+        request.resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.storeId == storeId;
+
+      // Store update: only merchant of this store can update, cannot change storeId or ownerUid
+      allow update: if isMerchantOf(storeId) &&
+        request.resource.data.storeId == resource.data.storeId &&
+        request.resource.data.ownerUid == resource.data.ownerUid;
+
+      allow delete: if false;
+
+      // Products subcollection: merchants/{storeId}/products/{productId}
+      match /products/{productId} {
+        // Store members (both merchant and customers of this store) can read
+        allow read: if isMemberOf(storeId);
+
+        // Only authenticated merchant of this specific store can create
+        allow create: if isMerchantOf(storeId) &&
+          request.resource.data.storeId == storeId &&
+          request.resource.data.name is string &&
+          request.resource.data.name.size() > 0 &&
+          request.resource.data.name.size() <= 200 &&
+          request.resource.data.isActive is bool;
+
+        // Only authenticated merchant of this specific store can update, cannot change storeId or id
+        allow update: if isMerchantOf(storeId) &&
+          request.resource.data.storeId == resource.data.storeId &&
+          request.resource.data.id == resource.data.id;
+
+        // Only authenticated merchant of this specific store can delete
+        allow delete: if isMerchantOf(storeId);
+
+        match /units/{unitId} {
+          allow read: if isMemberOf(storeId);
+          allow write: if isMerchantOf(storeId);
+        }
+      }
+
+      // Future subcollections foundation: orders
+      match /orders/{orderId} {
+        allow read: if isMerchantOf(storeId) ||
+          (isCustomerOf(storeId) && resource.data.customerUid == request.auth.uid);
+        allow create: if isMemberOf(storeId) &&
+          request.resource.data.storeId == storeId &&
+          request.resource.data.customerUid == request.auth.uid;
+        allow update: if isMerchantOf(storeId) ||
+          (isCustomerOf(storeId) && resource.data.customerUid == request.auth.uid && resource.data.status == 'DRAFT');
+        allow delete: if isMerchantOf(storeId);
+      }
+    }
+  }
+}
