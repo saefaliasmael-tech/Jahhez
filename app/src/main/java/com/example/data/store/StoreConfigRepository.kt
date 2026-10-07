@@ -3,6 +3,7 @@ package com.example.data.store
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -20,6 +21,7 @@ class StoreConfigRepository(private val dataStore: DataStore<Preferences>) {
         val KEY_STORE_ID = stringPreferencesKey("store_id")
         val KEY_STORE_NAME = stringPreferencesKey("store_name")
         val KEY_ROLE = stringPreferencesKey("user_role")
+        val KEY_ROLE_SELECTED = booleanPreferencesKey("is_role_selected")
         val KEY_OWNER_PHONE = stringPreferencesKey("owner_phone")
         val KEY_WHATSAPP_NUMBER = stringPreferencesKey("whatsapp_number")
         val KEY_FIREBASE_UID = stringPreferencesKey("firebase_uid")
@@ -63,6 +65,19 @@ class StoreConfigRepository(private val dataStore: DataStore<Preferences>) {
     val role: Flow<UserRole> = storeConfig.map { it.role }
     val firebaseUid: Flow<String?> = storeConfig.map { it.firebaseUid }
 
+    val hasConfiguredSession: Flow<Boolean> = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[KEY_ROLE_SELECTED] == true ||
+            (!preferences[KEY_STORE_ID].isNullOrBlank() && preferences[KEY_FIREBASE_UID] != null)
+        }
+
     suspend fun updateStoreDetails(
         storeName: String,
         ownerPhone: String,
@@ -90,6 +105,7 @@ class StoreConfigRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setRole(role: UserRole) {
         dataStore.edit { preferences ->
             preferences[KEY_ROLE] = role.name
+            preferences[KEY_ROLE_SELECTED] = true
         }
     }
 

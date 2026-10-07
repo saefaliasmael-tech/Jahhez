@@ -128,4 +128,22 @@ class StoreConfigRepositoryTest {
         repository.setFirebaseUid(null)
         assertEquals(null, repository.firebaseUid.first())
     }
+
+    @Test
+    fun testHasConfiguredSessionLifecycle() = runBlocking {
+        // Initially after clear()
+        assertEquals(false, repository.hasConfiguredSession.first())
+
+        // Once a role is selected/saved
+        repository.setRole(UserRole.CUSTOMER)
+        assertEquals(true, repository.hasConfiguredSession.first())
+
+        // When cleared again
+        repository.clear()
+        assertEquals(false, repository.hasConfiguredSession.first())
+
+        // Saving MERCHANT role marks session configured as well
+        repository.setRole(UserRole.MERCHANT)
+        assertEquals(true, repository.hasConfiguredSession.first())
+    }
 }

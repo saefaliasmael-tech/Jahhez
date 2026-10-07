@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -23,23 +24,34 @@ class StoreSettingsViewModel @JvmOverloads constructor(
     private val bootstrapManager: FirebaseBootstrapManager = FirebaseBootstrapManager.getInstance(application)
 ) : AndroidViewModel(application) {
 
+    private val repository = StoreConfigRepository(application)
+
     init {
         viewModelScope.launch {
-            try {
-                bootstrapManager.ensureBootstrappedAndSync()
-            } catch (e: Exception) {
-                // Ignore when offline or unconfigured
+            // Only execute startup bootstrap if user already has a saved/configured session.
+            // On fresh launches, Role Selection must appear first without Firebase blocking it.
+            if (repository.hasConfiguredSession.first()) {
+                try {
+                    bootstrapManager.ensureBootstrappedAndSync()
+                } catch (e: Exception) {
+                    // Ignore when offline or unconfigured
+                }
             }
         }
     }
-
-    private val repository = StoreConfigRepository(application)
 
     val storeConfig: StateFlow<StoreConfig> = repository.storeConfig
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = StoreConfig()
+        )
+
+    val hasConfiguredSession: StateFlow<Boolean?> = repository.hasConfiguredSession
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
         )
 
     val currentUser: StateFlow<AuthUser?> = authRepository.currentUser
@@ -75,6 +87,13 @@ class StoreSettingsViewModel @JvmOverloads constructor(
     fun setRole(role: UserRole) {
         viewModelScope.launch {
             repository.setRole(role)
+            if (role == UserRole.CUSTOMER) {
+                try {
+                    bootstrapManager.ensureBootstrappedAndSync()
+                } catch (e: Exception) {
+                    // Gracefully ignore offline or unconfigured API key
+                }
+            }
         }
     }
 

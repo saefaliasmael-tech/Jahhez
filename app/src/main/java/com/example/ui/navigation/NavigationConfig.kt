@@ -1,9 +1,9 @@
 package com.example.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -20,9 +20,17 @@ import com.example.data.store.UserRole
 data class NavigationItem(
     val screen: Screen,
     val title: String,
+    val customerTitle: String? = null,
     val icon: ImageVector,
     val allowedRoles: Set<UserRole>
-)
+) {
+    fun titleForRole(role: UserRole): String {
+        return when (role) {
+            UserRole.CUSTOMER -> customerTitle ?: title
+            else -> title
+        }
+    }
+}
 
 object NavigationConfig {
 
@@ -34,30 +42,35 @@ object NavigationConfig {
         NavigationItem(
             screen = Screen.Home,
             title = "الرئيسية",
+            customerTitle = "الرئيسية",
             icon = Icons.Default.Home,
             allowedRoles = setOf(UserRole.MERCHANT, UserRole.CUSTOMER)
         ),
         NavigationItem(
             screen = Screen.Products,
             title = "المنتجات",
+            customerTitle = "المنتجات",
             icon = Icons.Default.Inventory2,
             allowedRoles = setOf(UserRole.MERCHANT, UserRole.CUSTOMER)
         ),
         NavigationItem(
             screen = Screen.Orders,
             title = "الطلبيات",
-            icon = Icons.Default.ListAlt,
+            customerTitle = "طلباتي",
+            icon = Icons.AutoMirrored.Filled.ListAlt,
             allowedRoles = setOf(UserRole.MERCHANT, UserRole.CUSTOMER)
         ),
         NavigationItem(
             screen = Screen.Suppliers,
             title = "الموردين",
+            customerTitle = null,
             icon = Icons.Default.LocalShipping,
             allowedRoles = setOf(UserRole.MERCHANT) // Admin/management only, strictly hidden for CUSTOMER
         ),
         NavigationItem(
             screen = Screen.Settings,
             title = "الإعدادات",
+            customerTitle = "معلومات المتجر",
             icon = Icons.Default.Settings,
             allowedRoles = setOf(UserRole.MERCHANT, UserRole.CUSTOMER)
         )
@@ -83,3 +96,40 @@ object NavigationConfig {
         return role in matchedItem.allowedRoles
     }
 }
+
+enum class SelectableRoleType {
+    CUSTOMER,
+    MERCHANT,
+    OWNER
+}
+
+data class RoleSelectionOption(
+    val type: SelectableRoleType,
+    val title: String,
+    val description: String,
+    val route: String
+)
+
+object RoleSelectionConfig {
+    val options: List<RoleSelectionOption> = listOf(
+        RoleSelectionOption(
+            type = SelectableRoleType.CUSTOMER,
+            title = "زبون",
+            description = "تصفح المنتجات وأنشئ طلباتك",
+            route = Screen.Home.route
+        ),
+        RoleSelectionOption(
+            type = SelectableRoleType.MERCHANT,
+            title = "تاجر",
+            description = "إدارة متجرك ومنتجاتك وطلبات الزبائن",
+            route = Screen.MerchantLogin.route
+        ),
+        RoleSelectionOption(
+            type = SelectableRoleType.OWNER,
+            title = "Owner",
+            description = "إدارة التجار والنظام والإحصائيات",
+            route = Screen.OwnerLogin.route
+        )
+    )
+}
+

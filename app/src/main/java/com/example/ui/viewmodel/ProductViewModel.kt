@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -39,12 +40,15 @@ class ProductViewModel @JvmOverloads constructor(
         storeConfigRepo = StoreConfigRepository(application)
 
         // Strict bootstrap and sync on startup:
-        // Anonymous Auth -> User Profile -> Merchant Profile -> Product Sync
+        // Only run if user already has an active/configured session, avoiding premature
+        // auth failure on First Launch before role selection.
         viewModelScope.launch {
-            try {
-                bootstrapManager.ensureBootstrappedAndSync()
-            } catch (e: Exception) {
-                // Ignore offline startup failure
+            if (storeConfigRepo.hasConfiguredSession.first()) {
+                try {
+                    bootstrapManager.ensureBootstrappedAndSync()
+                } catch (e: Exception) {
+                    // Ignore offline startup failure
+                }
             }
         }
     }

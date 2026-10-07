@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -24,10 +25,23 @@ import com.example.ui.viewmodel.StoreSettingsViewModel
 
 @Composable
 fun MainContainer() {
-    val navController = rememberNavController()
-    val productViewModel: ProductViewModel = viewModel()
-    val orderViewModel: OrderViewModel = viewModel()
     val storeSettingsViewModel: StoreSettingsViewModel = viewModel()
+    val hasConfiguredSession by storeSettingsViewModel.hasConfiguredSession.collectAsState()
+
+    // Show temporary progress indicator while reading initial preferences
+    if (hasConfiguredSession == null) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    val startDestination = if (hasConfiguredSession == true) Screen.Home.route else Screen.RoleSelection.route
+
+    val navController = rememberNavController()
 
     val storeConfig by storeSettingsViewModel.storeConfig.collectAsState()
     val currentRole = storeConfig.role
@@ -71,9 +85,10 @@ fun MainContainer() {
             if (isTopLevel) {
                 NavigationBar {
                     topLevelItems.forEach { navItem ->
+                        val itemTitle = navItem.titleForRole(currentRole)
                         NavigationBarItem(
-                            icon = { Icon(navItem.icon, contentDescription = navItem.title) },
-                            label = { Text(navItem.title) },
+                            icon = { Icon(navItem.icon, contentDescription = itemTitle) },
+                            label = { Text(itemTitle) },
                             selected = currentRoute == navItem.screen.route,
                             onClick = {
                                 if (currentRoute != navItem.screen.route) {
@@ -99,8 +114,41 @@ fun MainContainer() {
         ) {
             NavHost(
                 navController = navController,
-                startDestination = Screen.Home.route
+                startDestination = startDestination
             ) {
+                composable(Screen.RoleSelection.route) {
+                    RoleSelectionScreen(
+                        onSelectCustomer = {
+                            storeSettingsViewModel.setRole(UserRole.CUSTOMER)
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.RoleSelection.route) {
+                                    inclusive = true
+                                }
+                                launchSingleTop = true
+                            }
+                        },
+                        onSelectMerchant = {
+                            navController.navigate(Screen.MerchantLogin.route)
+                        },
+                        onSelectOwner = {
+                            navController.navigate(Screen.OwnerLogin.route)
+                        }
+                    )
+                }
+                composable(Screen.MerchantLogin.route) {
+                    MerchantLoginScreen(
+                        onNavigateBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+                composable(Screen.OwnerLogin.route) {
+                    OwnerLoginScreen(
+                        onNavigateBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
                 composable(Screen.Home.route) {
                     HomeScreen(
                         onNavigateToProducts = {
@@ -124,9 +172,11 @@ fun MainContainer() {
                     )
                 }
                 composable(Screen.Products.route) {
+                    val productViewModel: ProductViewModel = viewModel()
                     ProductsScreen(viewModel = productViewModel)
                 }
                 composable(Screen.Orders.route) {
+                    val orderViewModel: OrderViewModel = viewModel()
                     OrdersScreen(
                         orderViewModel = orderViewModel,
                         onCreateNewOrder = {
@@ -138,6 +188,7 @@ fun MainContainer() {
                     )
                 }
                 composable(Screen.CreateOrder.route) {
+                    val orderViewModel: OrderViewModel = viewModel()
                     CreateEditOrderScreen(
                         orderViewModel = orderViewModel,
                         orderId = null,
@@ -153,6 +204,7 @@ fun MainContainer() {
                         navArgument("orderId") { type = NavType.LongType }
                     )
                 ) { backStackEntry ->
+                    val orderViewModel: OrderViewModel = viewModel()
                     val orderId = backStackEntry.arguments?.getLong("orderId") ?: 0L
                     CreateEditOrderScreen(
                         orderViewModel = orderViewModel,
